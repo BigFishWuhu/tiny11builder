@@ -96,8 +96,11 @@ if (! $myWindowsPrincipal.IsInRole($adminRole))
     exit
 }
 
-if (-not (Test-Path -Path "$PSScriptRoot/autounattend.xml")) {
-    Invoke-RestMethod "https://raw.githubusercontent.com/ntdevlabs/tiny11builder/refs/heads/main/autounattend.xml" -OutFile "$PSScriptRoot/autounattend.xml"
+$AutoUnattendPath = "$PSScriptRoot\autounattend.xml"
+$CreatedAutoUnattend = $false
+if (-not (Test-Path -Path $AutoUnattendPath)) {
+    Invoke-RestMethod "https://raw.githubusercontent.com/ntdevlabs/tiny11builder/refs/heads/main/autounattend.xml" -OutFile $AutoUnattendPath
+    $CreatedAutoUnattend = $true
 }
 
 # Start the transcript and prepare the window
@@ -264,13 +267,7 @@ foreach ($package in $packagesToRemove) {
     & 'dism' '/English' "/image:$($ScratchDisk)\scratchdir" '/Remove-ProvisionedAppxPackage' "/PackageName:$package"
 }
 
-Write-Output "Removing Edge:"
-Remove-Item -Path "$ScratchDisk\scratchdir\Program Files (x86)\Microsoft\Edge" -Recurse -Force | Out-Null
-Remove-Item -Path "$ScratchDisk\scratchdir\Program Files (x86)\Microsoft\EdgeUpdate" -Recurse -Force | Out-Null
-Remove-Item -Path "$ScratchDisk\scratchdir\Program Files (x86)\Microsoft\EdgeCore" -Recurse -Force | Out-Null
-& 'takeown' '/f' "$ScratchDisk\scratchdir\Windows\System32\Microsoft-Edge-Webview" '/r' | Out-Null
-& 'icacls' "$ScratchDisk\scratchdir\Windows\System32\Microsoft-Edge-Webview" '/grant' "$($adminGroup.Value):(F)" '/T' '/C' | Out-Null
-Remove-Item -Path "$ScratchDisk\scratchdir\Windows\System32\Microsoft-Edge-Webview" -Recurse -Force | Out-Null
+Write-Output "Keeping Edge and Internet Explorer:"
 Write-Output "Removing OneDrive:"
 & 'takeown' '/f' "$ScratchDisk\scratchdir\Windows\System32\OneDriveSetup.exe" | Out-Null
 & 'icacls' "$ScratchDisk\scratchdir\Windows\System32\OneDriveSetup.exe" '/grant' "$($adminGroup.Value):(F)" '/T' '/C' | Out-Null
@@ -321,7 +318,7 @@ Set-RegistryValue 'HKLM\zSOFTWARE\Policies\Microsoft\Windows\CloudContent' 'Disa
 Set-RegistryValue 'HKLM\zSOFTWARE\Policies\Microsoft\Windows\CloudContent' 'DisableCloudOptimizedContent' 'REG_DWORD' '1'
 Write-Output "Enabling Local Accounts on OOBE:"
 Set-RegistryValue 'HKLM\zSOFTWARE\Microsoft\Windows\CurrentVersion\OOBE' 'BypassNRO' 'REG_DWORD' '1'
-Copy-Item -Path "$PSScriptRoot\autounattend.xml" -Destination "$ScratchDisk\scratchdir\Windows\System32\Sysprep\autounattend.xml" -Force | Out-Null
+Copy-Item -Path $AutoUnattendPath -Destination "$ScratchDisk\scratchdir\Windows\System32\Sysprep\autounattend.xml" -Force | Out-Null
 
 Write-Output "Disabling Reserved Storage:"
 Set-RegistryValue 'HKLM\zSOFTWARE\Microsoft\Windows\CurrentVersion\ReserveManager' 'ShippedWithReserves' 'REG_DWORD' '0'
@@ -330,11 +327,10 @@ Set-RegistryValue 'HKLM\zSYSTEM\ControlSet001\Control\BitLocker' 'PreventDeviceE
 Write-Output "Disabling Chat icon:"
 Set-RegistryValue 'HKLM\zSOFTWARE\Policies\Microsoft\Windows\Windows Chat' 'ChatIcon' 'REG_DWORD' '3'
 Set-RegistryValue 'HKLM\zNTUSER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced' 'TaskbarMn' 'REG_DWORD' '0'
-Write-Output "Removing Edge related registries"
-Remove-RegistryValue "HKEY_LOCAL_MACHINE\zSOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Microsoft Edge"
-Remove-RegistryValue "HKEY_LOCAL_MACHINE\zSOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Microsoft Edge Update"
 Write-Output "Disabling OneDrive folder backup"
 Set-RegistryValue "HKLM\zSOFTWARE\Policies\Microsoft\Windows\OneDrive" "DisableFileSyncNGSC" "REG_DWORD" "1"
+Write-Output "Setting Windows Update maximum pause period to 20 years:"
+Set-RegistryValue 'HKLM\zSOFTWARE\Microsoft\WindowsUpdate\UX\Settings' 'FlightSettingsMaxPauseDays' 'REG_DWORD' '7300'
 Write-Output "Disabling Telemetry:"
 Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo' 'Enabled' 'REG_DWORD' '0'
 Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\Privacy' 'TailoredExperiencesWithDiagnosticDataEnabled' 'REG_DWORD' '0'
@@ -437,7 +433,7 @@ Dismount-WindowsImage -Path $ScratchDisk\scratchdir -Save
 Clear-Host
 Write-Output "The tiny11 image is now completed. Proceeding with the making of the ISO..."
 Write-Output "Copying unattended file for bypassing MS account on OOBE..."
-Copy-Item -Path "$PSScriptRoot\autounattend.xml" -Destination "$ScratchDisk\tiny11\autounattend.xml" -Force | Out-Null
+Copy-Item -Path $AutoUnattendPath -Destination "$ScratchDisk\tiny11\autounattend.xml" -Force | Out-Null
 Write-Output "Creating ISO image..."
 $ADKDepTools = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\$hostarchitecture\Oscdimg"
 $localOSCDIMGPath = "$PSScriptRoot\oscdimg.exe"
@@ -479,8 +475,10 @@ Get-Volume -DriveLetter $DriveLetter[0] | Get-DiskImage | Dismount-DiskImage
 Write-Output "Iso drive ejected"
 Write-Output "Removing oscdimg.exe..."
 Remove-Item -Path "$PSScriptRoot\oscdimg.exe" -Force -ErrorAction SilentlyContinue
-Write-Output "Removing autounattend.xml..."
-Remove-Item -Path "$PSScriptRoot\autounattend.xml" -Force -ErrorAction SilentlyContinue
+if ($CreatedAutoUnattend) {
+    Write-Output "Removing downloaded autounattend.xml..."
+    Remove-Item -Path $AutoUnattendPath -Force -ErrorAction SilentlyContinue
+}
 
 Write-Output "Cleanup check :"
 if (Test-Path -Path "$ScratchDisk\tiny11") {
@@ -516,16 +514,18 @@ if (Test-Path -Path "$PSScriptRoot\oscdimg.exe") {
 } else {
     Write-Output "oscdimg.exe does not exist. No action needed."
 }
-if (Test-Path -Path "$PSScriptRoot\autounattend.xml") {
-    Write-Output "autounattend.xml still exists. Attempting to remove it again..."
-    Remove-Item -Path "$PSScriptRoot\autounattend.xml" -Force -ErrorAction SilentlyContinue
-    if (Test-Path -Path "$PSScriptRoot\autounattend.xml") {
-        Write-Output "Failed to remove autounattend.xml."
+if ($CreatedAutoUnattend) {
+    if (Test-Path -Path $AutoUnattendPath) {
+        Write-Output "autounattend.xml still exists. Attempting to remove it again..."
+        Remove-Item -Path $AutoUnattendPath -Force -ErrorAction SilentlyContinue
+        if (Test-Path -Path $AutoUnattendPath) {
+            Write-Output "Failed to remove autounattend.xml."
+        } else {
+            Write-Output "autounattend.xml removed successfully."
+        }
     } else {
-        Write-Output "autounattend.xml removed successfully."
+        Write-Output "autounattend.xml does not exist. No action needed."
     }
-} else {
-    Write-Output "autounattend.xml does not exist. No action needed."
 }
 
 # Stop the transcript
