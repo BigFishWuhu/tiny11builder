@@ -1,0 +1,14 @@
+# 显示文件扩展名
+Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' 'HideFileExt' 'REG_DWORD' '0'
+
+# 显示隐藏文件
+Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' 'Hidden' 'REG_DWORD' '1'
+
+# 显示受保护的系统文件
+Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' 'ShowSuperHidden' 'REG_DWORD' '1'
+
+# 打开资源管理器默认进入"此电脑"
+Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' 'LaunchTo' 'REG_DWORD' '1'
+
+# 显示完整路径（标题栏）
+Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\Explorer\CabinetState' 'FullPath' 'REG_DWORD' '1'
